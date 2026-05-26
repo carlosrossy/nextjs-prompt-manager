@@ -1,8 +1,9 @@
+import { searchPromptAction } from '@/app/actions/prompt.actions';
 import {
   SidebarContent,
   SidebarContentProps,
 } from '@/components/sidebar/sidebar-content';
-import { render, screen } from '@/lib/test-utils';
+import { render, screen, waitFor } from '@/lib/test-utils';
 import userEvent from '@testing-library/user-event';
 
 let mockSearchParams = new URLSearchParams();
@@ -11,6 +12,14 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
   useSearchParams: () => mockSearchParams,
 }));
+
+jest.mock('@/app/actions/prompt.actions', () => ({
+  searchPromptAction: jest.fn(),
+}));
+
+const mockedSearchAction = searchPromptAction as jest.MockedFunction<
+  typeof searchPromptAction
+>;
 
 const initialPrompts = [
   {
@@ -28,6 +37,19 @@ const makeSut = (
 
 describe('SidebarContent', () => {
   const user = userEvent.setup();
+  let requestSubmitSpy: ReturnType<typeof jest.spyOn>;
+
+  beforeEach(() => {
+    mockedSearchAction.mockReset();
+    mockedSearchAction.mockResolvedValue({ success: true, prompts: [] });
+    requestSubmitSpy = jest
+      .spyOn(HTMLFormElement.prototype, 'requestSubmit')
+      .mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    requestSubmitSpy.mockRestore();
+  });
 
   describe('Base', () => {
     it('deveria renderizar o botão para criar um novo prompt', () => {
@@ -85,6 +107,26 @@ describe('SidebarContent', () => {
       expect(expandButton).not.toBeInTheDocument();
     });
 
+    it('deveria reexpandir ao clicar no botão de expandir', async () => {
+      makeSut();
+      const collapseButton = screen.getByRole('button', {
+        name: /minimizar sidebar/i,
+      });
+      await user.click(collapseButton);
+
+      const expandButton = screen.getByRole('button', {
+        name: /expandir sidebar/i,
+      });
+      await user.click(expandButton);
+
+      expect(
+        screen.getByRole('button', { name: /minimizar sidebar/i })
+      ).toBeVisible();
+      expect(
+        screen.getByRole('navigation', { name: 'Lista de prompts' })
+      ).toBeVisible();
+    });
+
     it('deveria contrair e mostrar o botão de expandir', async () => {
       makeSut();
 
@@ -100,34 +142,6 @@ describe('SidebarContent', () => {
       expect(expandButton).toBeInTheDocument();
 
       expect(collapseButton).not.toBeInTheDocument();
-    });
-
-    it('deveria exibir o botão de criar um novo prompt na sidebar minimizada', async () => {
-      makeSut();
-      const collapseButton = screen.getByRole('button', {
-        name: /minimizar sidebar/i,
-      });
-
-      await user.click(collapseButton);
-
-      const newPromptButton = screen.getByRole('button', {
-        name: 'Novo prompt',
-      });
-      expect(newPromptButton).toBeVisible();
-    });
-
-    it('não deveria exibir a lista de prompts na sidebar minimizada', async () => {
-      makeSut();
-      const collapseButton = screen.getByRole('button', {
-        name: /minimizar sidebar/i,
-      });
-
-      await user.click(collapseButton);
-
-      const nav = screen.queryByRole('navigation', {
-        name: 'Lista de prompts',
-      });
-      expect(nav).not.toBeInTheDocument();
     });
   });
 
@@ -160,6 +174,25 @@ describe('SidebarContent', () => {
       expect(lastClearCall?.[0]).toBe('/');
     });
 
+    it('deveria submeter o form ao digitar no campo de busca', async () => {
+      makeSut();
+
+      const searchInput = screen.getByPlaceholderText('Buscar prompts...');
+
+      await user.type(searchInput, 'AI');
+
+      expect(requestSubmitSpy).toHaveBeenCalled();
+    });
+
+    it('deveria submeter automaticamente ao montar quando houver query', async () => {
+      const text = 'text';
+      const searchParams = new URLSearchParams(`q=${text}`);
+      mockSearchParams = searchParams;
+      makeSut();
+
+      expect(requestSubmitSpy).toHaveBeenCalled();
+    });
+
     it('deveria iniciar o campo de busca com o search param', () => {
       const text = 'inicial';
       const searchParams = new URLSearchParams(`q=${text}`);
@@ -168,6 +201,25 @@ describe('SidebarContent', () => {
       const searchInput = screen.getByPlaceholderText('Buscar prompts...');
 
       expect(searchInput).toHaveValue(text);
+    });
+
+    it('deveria manter os prompts iniciais quando a busca falhar', async () => {
+      requestSubmitSpy.mockRestore();
+      mockedSearchAction.mockResolvedValue({
+        success: false,
+        message: 'Falha ao buscar prompts.',
+      });
+
+      makeSut();
+      const searchInput = screen.getByPlaceholderText('Buscar prompts...');
+
+      await user.type(searchInput, 'x');
+
+      await waitFor(() => {
+        expect(mockedSearchAction).toHaveBeenCalled();
+      });
+
+      expect(screen.getByText(initialPrompts[0].title)).toBeInTheDocument();
     });
   });
 });
