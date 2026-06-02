@@ -3,8 +3,6 @@ import {
   searchPromptAction,
 } from '@/app/actions/prompt.actions';
 
-jest.mock('next/cache', () => ({ revalidatePath: jest.fn() }));
-
 jest.mock('@/lib/prisma', () => ({ prisma: {} }));
 
 const mockedSearchExecute = jest.fn();

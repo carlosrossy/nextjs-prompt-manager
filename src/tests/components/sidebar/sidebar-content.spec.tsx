@@ -193,14 +193,14 @@ describe('SidebarContent', () => {
       expect(requestSubmitSpy).toHaveBeenCalled();
     });
 
-    it('deveria iniciar o campo de busca com o search param', () => {
+    it('deveria iniciar o campo de busca com o search param', async () => {
       const text = 'inicial';
       const searchParams = new URLSearchParams(`q=${text}`);
       mockSearchParams = searchParams;
       makeSut();
       const searchInput = screen.getByPlaceholderText('Buscar prompts...');
 
-      expect(searchInput).toHaveValue(text);
+      await waitFor(() => expect(searchInput).toHaveValue(text));
     });
 
     it('deveria manter os prompts iniciais quando a busca falhar', async () => {
